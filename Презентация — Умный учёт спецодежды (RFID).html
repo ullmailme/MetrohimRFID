@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>МЕТРОХИМ — Умный учёт спецодежды (RFID)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0f2038; --ink:#101826; --blue:#1e4fa3; --blue-2:#3f7bd6; --blue-3:#7fa8e6;
+    --body:#5b6472; --line:#e3e8ef; --wash:#eef3f9; --wash-2:#f7f9fc; --gold:#d99a3d;
+    --navy-2:#16294a; --navy-line:#2c4370; --good:#1f9d6b; --bad:#d0554e;
+    --shadow:0 16px 44px rgba(15,32,56,0.10); --shadow-sm:0 10px 30px rgba(15,32,56,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Manrope',system-ui,sans-serif;color:var(--body);background:#0a1526;-webkit-font-smoothing:antialiased;overflow:hidden}
+  ::selection{background:var(--blue);color:#fff}
+
+  /* ---------- deck / scale-to-fit stage ---------- */
+  .deck{position:fixed;inset:0;overflow:hidden;background:
+    radial-gradient(1200px 700px at 80% -10%, #16294a 0%, #0a1526 60%);}
+  .stage-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .stage{position:relative;width:1280px;height:720px;transform-origin:center center}
+
+  .slide{position:absolute;inset:0;background:#fff;border-radius:22px;overflow:hidden;
+    padding:52px 68px;opacity:0;transform:translateX(46px) scale(.985);
+    transition:opacity .5s ease, transform .55s cubic-bezier(.22,.61,.36,1);
+    pointer-events:none;box-shadow:0 40px 120px rgba(0,0,0,.45)}
+  .slide.is-active{opacity:1;transform:none;pointer-events:auto;z-index:2}
+  .slide.is-prev{opacity:0;transform:translateX(-46px) scale(.985)}
+
+  /* persistent chrome inside each slide */
+  .brand{position:absolute;top:30px;left:68px;font-family:'Outfit',sans-serif;font-weight:800;
+    font-size:19px;letter-spacing:-.5px;color:var(--navy);z-index:5}
+  .brand span{color:var(--blue)}
+  .pageno{position:absolute;top:30px;right:68px;font-family:'Outfit',sans-serif;font-weight:600;
+    font-size:13px;letter-spacing:1px;color:#9aa4b2;z-index:5}
+  .pageno b{color:var(--navy)}
+
+  /* typography helpers */
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--wash);color:var(--navy);
+    font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;letter-spacing:1.4px;
+    text-transform:uppercase;padding:7px 15px;border-radius:9999px}
+  .eyebrow.on-dark{background:rgba(255,255,255,.12);color:#dbe4f2}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--blue)}
+  h2.title{font-family:'Outfit',sans-serif;font-weight:700;color:var(--ink);letter-spacing:-.8px;
+    line-height:1.06;font-size:44px;margin:16px 0 6px}
+  .serif{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;color:var(--blue);letter-spacing:0}
+  .lead{font-size:17px;line-height:1.55;max-width:760px;color:var(--body)}
+  .kicker{font-family:'Instrument Serif',serif;font-style:italic;font-size:24px;color:var(--blue)}
+
+  /* icon badges */
+  .ic{flex:0 0 auto;width:48px;height:48px;border-radius:9999px;background:var(--navy);
+    display:flex;align-items:center;justify-content:center}
+  .ic.blue{background:var(--blue)}
+  .ic.lg{width:60px;height:60px}
+  .ic.sm{width:38px;height:38px}
+  .ic svg{stroke:#fff;fill:none;stroke-width:1.9}
+
+  /* cards */
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+  .card h3{font-family:'Outfit',sans-serif;font-weight:600;font-size:18px;color:var(--ink);margin-bottom:7px}
+  .card p{font-size:13.5px;line-height:1.5}
+  .grid{display:grid;gap:20px}
+
+  .pill-num{font-family:'Outfit',sans-serif;font-weight:800;letter-spacing:-1px;color:var(--navy)}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:'Outfit',sans-serif;font-weight:600;
+    font-size:12.5px;color:var(--navy);background:var(--wash);padding:7px 13px;border-radius:9999px}
+  .chip svg{width:15px;height:15px;stroke:var(--blue);fill:none;stroke-width:2.4}
+
+  /* progress + nav */
+  .hud{position:fixed;left:0;right:0;bottom:18px;display:flex;align-items:center;justify-content:center;
+    gap:16px;z-index:30}
+  .nav-btn{width:42px;height:42px;border-radius:9999px;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.06);color:#fff;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:.2s;backdrop-filter:blur(6px)}
+  .nav-btn:hover{background:var(--blue);border-color:var(--blue)}
+  .nav-btn svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2.2}
+  .dots{display:flex;gap:8px;align-items:center}
+  .dot-n{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:.25s}
+  .dot-n.active{background:#fff;width:24px;border-radius:9999px}
+  .hint{position:fixed;bottom:20px;right:22px;color:rgba(255,255,255,.4);font-size:11px;z-index:30;
+    font-family:'Outfit',sans-serif;letter-spacing:.5px}
+
+  /* photo placeholder */
+  .photo{border:2px dashed #c4d0e2;border-radius:14px;background:
+    repeating-linear-gradient(45deg,#f3f7fc,#f3f7fc 12px,#eef3f9 12px,#eef3f9 24px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    color:#8494ab;text-align:center;padding:14px}
+  .photo svg{width:26px;height:26px;stroke:#a9b7cc;fill:none;stroke-width:1.7}
+  .photo span{font-size:11.5px;font-family:'Outfit',sans-serif;font-weight:500;max-width:180px;line-height:1.3}
+
+  @media print{ body{overflow:visible} .hud,.hint{display:none} }
+</style>
+</head>
+<body>
+<div class="deck">
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+
+    <!-- =============== 1 · TITLE =============== -->
+    <section class="slide" data-label="Титул">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>01</b> / 12</div>
+      <div style="display:grid;grid-template-columns:1.15fr .85fr;height:100%;align-items:center;gap:40px">
+        <div>
+          <div class="eyebrow" style="margin-bottom:26px">Система умного учёта · RFID</div>
+          <h2 class="title" style="font-size:62px;margin-top:4px">Каждая вещь —<br>под контролем.</h2>
+          <div class="serif" style="font-size:34px;margin:10px 0 26px">от пошива до сотой стирки</div>
+          <p class="lead" style="font-size:18px">Электронная метка внутри каждой вещи. Система сама знает, где комплект,
+          сколько раз он стирался и когда пора на замену. Без ручного пересчёта и потерь.</p>
+          <div style="display:flex;gap:10px;margin-top:28px;flex-wrap:wrap">
+            <span class="chip"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Скорость</span>
+            <span class="chip"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Ноль потерь</span>
+            <span class="chip"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>История каждой вещи</span>
+          </div>
+        </div>
+        <!-- RFID tag hero graphic -->
+        <div style="position:relative;height:440px;display:flex;align-items:center;justify-content:center">
+          <div style="position:absolute;width:360px;height:360px;border-radius:50%;
+            background:radial-gradient(circle,rgba(30,79,163,.12),transparent 68%)"></div>
+          <svg viewBox="0 0 200 200" style="width:340px;height:340px;position:relative">
+            <g fill="none" stroke="#1e4fa3" stroke-width="2.4" stroke-linecap="round" opacity=".9">
+              <path d="M118 100a22 22 0 0 0-36 0" opacity=".95"/>
+              <path d="M128 100a34 34 0 0 0-56 0" opacity=".6"/>
+              <path d="M138 100a46 46 0 0 0-76 0" opacity=".35"/>
+            </g>
+            <!-- tag body -->
+            <g transform="translate(64,96) rotate(-8)">
+              <rect x="0" y="0" width="88" height="56" rx="10" fill="#0f2038"/>
+              <circle cx="16" cy="28" r="6.5" fill="none" stroke="#7fa8e6" stroke-width="3"/>
+              <rect x="30" y="16" width="46" height="6" rx="3" fill="#3f7bd6"/>
+              <rect x="30" y="27" width="38" height="5" rx="2.5" fill="#5f82b8"/>
+              <rect x="30" y="37" width="30" height="5" rx="2.5" fill="#41567d"/>
+            </g>
+          </svg>
+          <div style="position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+            background:#fff;border:1px solid var(--line);box-shadow:var(--shadow-sm);border-radius:12px;
+            padding:10px 16px;font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;color:var(--navy)">
+            RFID-метка · читается на&nbsp;расстоянии</div>
+        </div>
+      </div>
+      <div style="position:absolute;left:68px;bottom:34px;font-family:'Outfit',sans-serif;font-weight:600;
+        font-size:12.5px;color:#9aa4b2;letter-spacing:.5px">Презентация для внедрения · 2026</div>
+    </section>
+
+    <!-- =============== 2 · PROBLEM =============== -->
+    <section class="slide" data-label="Проблема">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>02</b> / 12</div>
+      <div class="eyebrow" style="background:#fdeceb;color:#b23b34;margin-top:26px"><span class="dot" style="background:#d0554e"></span>Проблема</div>
+      <h2 class="title">Учёт вручную — это потери</h2>
+      <p class="lead">Тысячи вещей ходят по кругу «выдал → носили → вернули → стирка». Пока их считают руками — теряются, путаются и всплывают споры.</p>
+
+      <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-top:30px">
+        <div class="card">
+          <div class="ic" style="background:#d0554e;margin-bottom:14px"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+          <h3>Вещи теряются</h3>
+          <p>Никто не знает, у какого клиента застрял комплект. Пропажи списывают «в никуда».</p>
+        </div>
+        <div class="card">
+          <div class="ic" style="background:#e08a3c;margin-bottom:14px"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+          <h3>Ошибки в подсчёте</h3>
+          <p>Человек ошибается на каждой партии. Цифры на бумаге не сходятся с реальностью.</p>
+        </div>
+        <div class="card">
+          <div class="ic" style="background:#8a6cc0;margin-bottom:14px"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <h3>Долгий пересчёт</h3>
+          <p>Инвентаризация — это часы работы кладовщика вместо минут.</p>
+        </div>
+        <div class="card">
+          <div class="ic" style="background:#4a80c9;margin-bottom:14px"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/></svg></div>
+          <h3>Споры с клиентами</h3>
+          <p>«Мы вернули!» — «Не приходило.» Доказать нечем, страдают отношения.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:26px;display:flex;align-items:center;gap:20px;background:var(--navy);
+        border-radius:16px;padding:20px 28px;color:#fff">
+        <div class="pill-num" style="font-size:46px;color:#fff">1–2%</div>
+        <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:16px;color:#cdd8ea;line-height:1.4">
+          парка спецодежды теряется каждый год при ручном учёте —<br>это прямые деньги, которые уходят незаметно.</div>
+      </div>
+    </section>
+
+    <!-- =============== 3 · SOLUTION =============== -->
+    <section class="slide" data-label="Решение">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>03</b> / 12</div>
+      <div style="display:grid;grid-template-columns:1fr .82fr;gap:44px;height:100%;align-items:center">
+        <div>
+          <div class="eyebrow" style="margin-top:8px"><span class="dot"></span>Решение</div>
+          <h2 class="title">Метка, которая знает<br>всё о&nbsp;вещи</h2>
+          <p class="lead" style="margin-bottom:22px">В каждую вещь при пошиве вшивается маленькая метка размером со стикер.
+          Считыватель «видит» её на&nbsp;расстоянии — <b style="color:var(--ink)">без штрих-кодов и&nbsp;ручного ввода</b>.</p>
+
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;gap:14px">
+              <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:15px;color:var(--navy)"><b style="font-family:Outfit">Выдерживает до 200&nbsp;°C</b> — не боится сушки и глажки</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:15px;color:var(--navy)"><b style="font-family:Outfit">Сотни стирок</b> — служит дольше самой вещи</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:15px;color:var(--navy)"><b style="font-family:Outfit">Не боится химии</b> — стирка и химчистка ей нипочём</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- garment + waves graphic -->
+        <div style="position:relative;height:460px;background:var(--wash);border-radius:20px;
+          display:flex;align-items:center;justify-content:center;overflow:hidden">
+          <svg viewBox="0 0 260 300" style="width:300px;height:340px">
+            <!-- jacket silhouette -->
+            <path d="M130 40 L96 54 L44 84 L64 128 L92 112 L92 250 L168 250 L168 112 L196 128 L216 84 L164 54 Z"
+              fill="#0f2038"/>
+            <path d="M130 40 L112 66 L130 84 L148 66 Z" fill="#16294a"/>
+            <!-- tag on hem -->
+            <g transform="translate(150,214)">
+              <rect x="0" y="0" width="40" height="26" rx="6" fill="#3f7bd6"/>
+              <rect x="7" y="6" width="26" height="4" rx="2" fill="#fff" opacity=".85"/>
+              <rect x="7" y="13" width="18" height="4" rx="2" fill="#fff" opacity=".6"/>
+            </g>
+            <!-- reader waves -->
+            <g fill="none" stroke="#1e4fa3" stroke-width="3" stroke-linecap="round">
+              <path d="M206 200a20 20 0 0 1 0 40" opacity=".9"/>
+              <path d="M216 190a34 34 0 0 1 0 60" opacity=".55"/>
+              <path d="M226 180a48 48 0 0 1 0 80" opacity=".3"/>
+            </g>
+          </svg>
+          <div style="position:absolute;top:18px;left:18px" class="chip">RFID вшита в шов</div>
+          <div style="position:absolute;bottom:18px;right:18px;background:#fff;border-radius:10px;
+            box-shadow:var(--shadow-sm);padding:8px 12px;font-family:'Outfit';font-weight:600;font-size:12px;color:var(--navy)">
+            📡 Ручной сканер</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============== 4 · CYCLE =============== -->
+    <section class="slide" data-label="Как работает">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>04</b> / 12</div>
+      <div style="display:grid;grid-template-columns:.9fr 1.1fr;gap:30px;height:100%;align-items:center">
+        <div>
+          <div class="eyebrow"><span class="dot"></span>Как это работает</div>
+          <h2 class="title">Один круг жизни<br>каждой вещи</h2>
+          <p class="lead" style="margin-bottom:20px">На каждом этапе вещь проходит мимо считывателя —
+          и система сама отмечает, где она сейчас. Никто ничего не вводит руками.</p>
+          <div style="background:var(--wash);border-radius:14px;padding:16px 20px;display:flex;gap:14px;align-items:center">
+            <div class="ic blue"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+            <div style="font-size:14px;color:var(--navy);line-height:1.45">
+              <b style="font-family:Outfit">Ни один шаг не пропущен.</b> В любой момент видно, на каком этапе находится вещь.</div>
+          </div>
+        </div>
+
+        <!-- circular cycle -->
+        <div style="position:relative;width:100%;max-width:470px;aspect-ratio:1/1;margin:0 auto">
+          <svg viewBox="0 0 400 400" style="position:absolute;inset:0;width:100%;height:100%">
+            <circle cx="200" cy="200" r="150" fill="none" stroke="#1e4fa3" stroke-width="2" stroke-dasharray="3 8" opacity=".55"/>
+            <ellipse cx="200" cy="362" rx="150" ry="24" fill="#0f2038" opacity=".05"/>
+          </svg>
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:120px;height:120px;
+            border-radius:16px;background:var(--navy);display:flex;flex-direction:column;align-items:center;
+            justify-content:center;gap:4px;box-shadow:0 16px 40px rgba(15,32,56,.25);color:#fff">
+            <svg viewBox="0 0 24 24" style="width:30px;height:30px;stroke:#7fa8e6;fill:none;stroke-width:1.8"><path d="M16 3l-4 2-4-2-6 4 3 4 3-2v10h8V9l3 2 3-4z"/></svg>
+            <div style="font-family:'Outfit';font-weight:700;font-size:12px;text-align:center">Вещь<br>с меткой</div>
+          </div>
+          <!-- 6 nodes -->
+          <div class="cyc" style="left:50%;top:2%">1 · Пошив + метка</div>
+          <div class="cyc" style="left:97%;top:28%">2 · Склад</div>
+          <div class="cyc" style="left:97%;top:72%">3 · Выдача</div>
+          <div class="cyc" style="left:50%;top:98%">4 · У клиента</div>
+          <div class="cyc" style="left:3%;top:72%">5 · Возврат</div>
+          <div class="cyc" style="left:3%;top:28%">6 · Стирка</div>
+        </div>
+      </div>
+      <style>
+        .cyc{position:absolute;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--line);
+          box-shadow:var(--shadow-sm);border-radius:9999px;padding:9px 15px;white-space:nowrap;
+          font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;color:var(--navy)}
+        .cyc::first-letter{color:var(--blue)}
+      </style>
+    </section>
+
+    <!-- =============== 5 · SPEED / GATE =============== -->
+    <section class="slide" data-label="Скорость">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>05</b> / 12</div>
+      <div class="eyebrow" style="margin-top:26px"><span class="dot"></span>Скорость</div>
+      <h2 class="title">Считаем сотни вещей за&nbsp;секунды</h2>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px">
+        <!-- BEFORE -->
+        <div style="background:var(--wash-2);border:1px solid var(--line);border-radius:18px;padding:26px 28px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <span style="width:34px;height:34px;border-radius:9999px;background:#eadfe0;color:#b23b34;
+              display:flex;align-items:center;justify-content:center;font-family:Outfit;font-weight:700;font-size:15px">✕</span>
+            <span style="font-family:'Outfit';font-weight:700;font-size:19px;color:var(--navy)">Было</span>
+          </div>
+          <div style="font-size:16px;color:var(--body);line-height:1.6">Кладовщик достаёт каждую вещь,
+          ищет ярлык, вписывает в журнал. Партию в 150 вещей считают <b style="color:var(--ink)">полчаса и дольше</b>.</div>
+          <div style="margin-top:20px;display:inline-flex;align-items:center;gap:10px;background:#fff;
+            border-radius:12px;padding:12px 18px;box-shadow:var(--shadow-sm)">
+            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:#b23b34;fill:none;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span class="pill-num" style="font-size:30px;color:#b23b34">30+ мин</span>
+          </div>
+        </div>
+        <!-- AFTER -->
+        <div style="background:var(--navy);border-radius:18px;padding:26px 28px;color:#fff;position:relative;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <span style="width:34px;height:34px;border-radius:9999px;background:var(--blue);color:#fff;
+              display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:#fff;fill:none;stroke-width:3"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span style="font-family:'Outfit';font-weight:700;font-size:19px">Стало</span>
+          </div>
+          <div style="font-size:16px;color:#cdd8ea;line-height:1.6">Тележку с бельём провозят через
+          <b style="color:#fff">RFID-ворота</b>. Система разом считывает все метки и сама отмечает возврат.</div>
+          <div style="margin-top:20px;display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,.1);
+            border-radius:12px;padding:12px 18px">
+            <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:#7fa8e6;fill:none;stroke-width:2.2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+            <span class="pill-num" style="font-size:30px;color:#fff">5–10 сек</span>
+          </div>
+          <!-- gate glyph -->
+          <svg viewBox="0 0 120 90" style="position:absolute;right:-6px;bottom:-8px;width:170px;opacity:.16">
+            <rect x="14" y="6" width="12" height="78" rx="3" fill="#7fa8e6"/>
+            <rect x="94" y="6" width="12" height="78" rx="3" fill="#7fa8e6"/>
+            <rect x="14" y="6" width="92" height="12" rx="3" fill="#7fa8e6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div style="margin-top:24px;display:flex;align-items:center;justify-content:center;gap:18px;
+        background:linear-gradient(90deg,#1e4fa3,#3f7bd6);border-radius:16px;padding:20px 28px;color:#fff">
+        <span class="pill-num" style="font-size:52px;color:#fff">до&nbsp;300</span>
+        <span style="font-family:'Outfit';font-weight:600;font-size:18px;color:#eaf1fb;line-height:1.35">
+          вещей за один проезд тележки через ворота —<br>инвентаризация из часов превращается в секунды.</span>
+      </div>
+    </section>
+
+    <!-- =============== 6 · ITEM CARD =============== -->
+    <section class="slide" data-label="Паспорт вещи">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>06</b> / 12</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:44px;height:100%;align-items:center">
+        <div>
+          <div class="eyebrow"><span class="dot"></span>Полная история</div>
+          <h2 class="title">Паспорт каждой вещи</h2>
+          <p class="lead" style="margin-bottom:22px">По каждой вещи система хранит всю историю. Видно, сколько она отслужила и когда её пора менять.</p>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:14.5px;color:var(--navy)"><b style="font-family:Outfit">Списываем вовремя.</b> Вещь уходит на замену по ресурсу, а не «на глаз».</div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:14.5px;color:var(--navy)"><b style="font-family:Outfit">Планируем закупки.</b> Заранее видно, сколько и чего скоро понадобится.</div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div style="font-size:14.5px;color:var(--navy)"><b style="font-family:Outfit">Закрываем споры.</b> История выдач и возвратов — под рукой.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- item card mock -->
+        <div class="card" style="padding:0;overflow:hidden;box-shadow:0 24px 60px rgba(15,32,56,.14)">
+          <div style="background:var(--navy);padding:20px 24px;color:#fff;display:flex;align-items:center;gap:14px">
+            <div class="ic blue" style="background:rgba(255,255,255,.14)"><svg viewBox="0 0 24 24"><path d="M16 3l-4 2-4-2-6 4 3 4 3-2v10h8V9l3 2 3-4z"/></svg></div>
+            <div>
+              <div style="font-family:'Outfit';font-weight:700;font-size:19px">Куртка рабочая · р.&nbsp;54</div>
+              <div style="font-size:12px;color:#9fb2d4;letter-spacing:1px;font-family:'Outfit'">RFID · E280&nbsp;6894&nbsp;0000&nbsp;5678</div>
+            </div>
+          </div>
+          <div style="padding:22px 24px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;margin-bottom:20px">
+              <div><div style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa4b2;font-family:Outfit;font-weight:600;margin-bottom:3px">Клиент</div><div style="font-family:Outfit;font-weight:600;color:var(--ink);font-size:15px">ООО «Газпром-СПб»</div></div>
+              <div><div style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa4b2;font-family:Outfit;font-weight:600;margin-bottom:3px">Сотрудник</div><div style="font-family:Outfit;font-weight:600;color:var(--ink);font-size:15px">Иванов И.</div></div>
+              <div><div style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa4b2;font-family:Outfit;font-weight:600;margin-bottom:3px">Где сейчас</div><div style="display:inline-flex;align-items:center;gap:6px;font-family:Outfit;font-weight:600;color:var(--blue);font-size:15px"><span style="width:8px;height:8px;border-radius:50%;background:var(--blue)"></span>Прачечная</div></div>
+              <div><div style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#9aa4b2;font-family:Outfit;font-weight:600;margin-bottom:3px">В работе с</div><div style="font-family:Outfit;font-weight:600;color:var(--ink);font-size:15px">03.2024</div></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:18px">
+              <div style="flex:1;background:var(--wash);border-radius:10px;padding:11px;text-align:center"><div class="pill-num" style="font-size:22px">120</div><div style="font-size:11px;color:var(--body)">стирок</div></div>
+              <div style="flex:1;background:var(--wash);border-radius:10px;padding:11px;text-align:center"><div class="pill-num" style="font-size:22px">3</div><div style="font-size:11px;color:var(--body)">ремонта</div></div>
+              <div style="flex:1;background:var(--wash);border-radius:10px;padding:11px;text-align:center"><div class="pill-num" style="font-size:22px">64</div><div style="font-size:11px;color:var(--body)">выдачи</div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--body);margin-bottom:7px">
+              <span style="font-family:Outfit;font-weight:600;color:var(--navy)">Остаточный ресурс</span><span>120 / 180 стирок</span></div>
+            <div style="height:10px;border-radius:9999px;background:#e7edf5;overflow:hidden">
+              <div style="width:66%;height:100%;border-radius:9999px;background:linear-gradient(90deg,#1e4fa3,#3f7bd6)"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============== 7 · DASHBOARD =============== -->
+    <section class="slide" data-label="Прозрачность">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>07</b> / 12</div>
+      <div class="eyebrow" style="margin-top:26px"><span class="dot"></span>Прозрачность</div>
+      <h2 class="title">Вся одежда — на&nbsp;одном экране</h2>
+      <p class="lead">Руководитель в любой момент видит, где находится весь парк спецодежды. Пример в реальном времени:</p>
+
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:28px">
+        <div class="card" style="text-align:center;padding:24px 14px">
+          <div class="ic lg" style="margin:0 auto 12px"><svg viewBox="0 0 24 24"><path d="M3 9l1-5h16l1 5M4 9h16v11H4zM9 20v-6h6v6"/></svg></div>
+          <div class="pill-num" style="font-size:34px">1&nbsp;180</div>
+          <div style="font-size:13px;font-family:Outfit;font-weight:600;color:var(--navy);margin-top:2px">На складе</div>
+        </div>
+        <div class="card" style="text-align:center;padding:24px 14px">
+          <div class="ic lg" style="margin:0 auto 12px"><svg viewBox="0 0 24 24"><path d="M3 21h18M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M9 8h.01M12 8h.01M15 8h.01M9 12h.01M12 12h.01M15 12h.01"/></svg></div>
+          <div class="pill-num" style="font-size:34px">1&nbsp;520</div>
+          <div style="font-size:13px;font-family:Outfit;font-weight:600;color:var(--navy);margin-top:2px">У клиентов</div>
+        </div>
+        <div class="card" style="text-align:center;padding:24px 14px">
+          <div class="ic lg" style="margin:0 auto 12px"><svg viewBox="0 0 24 24"><rect x="3" y="2" width="18" height="20" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M7 5h.01M11 5h.01"/></svg></div>
+          <div class="pill-num" style="font-size:34px">210</div>
+          <div style="font-size:13px;font-family:Outfit;font-weight:600;color:var(--navy);margin-top:2px">В стирке</div>
+        </div>
+        <div class="card" style="text-align:center;padding:24px 14px">
+          <div class="ic lg" style="margin:0 auto 12px"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.4 2.4-2.6-.5-.5-2.6z"/></svg></div>
+          <div class="pill-num" style="font-size:34px">65</div>
+          <div style="font-size:13px;font-family:Outfit;font-weight:600;color:var(--navy);margin-top:2px">На ремонте</div>
+        </div>
+        <div class="card" style="text-align:center;padding:24px 14px;border-color:#f0d6d4">
+          <div class="ic lg" style="margin:0 auto 12px;background:#d0554e"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+          <div class="pill-num" style="font-size:34px;color:#c0473f">25</div>
+          <div style="font-size:13px;font-family:Outfit;font-weight:600;color:#c0473f;margin-top:2px">Потеряно</div>
+        </div>
+      </div>
+
+      <div style="margin-top:26px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div style="display:flex;gap:12px;align-items:center;background:var(--wash);border-radius:14px;padding:16px 18px">
+          <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg></div>
+          <div style="font-size:13.5px;color:var(--navy);line-height:1.35"><b style="font-family:Outfit">Загрузка прачечной</b> — видно пики и простои</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;background:var(--wash);border-radius:14px;padding:16px 18px">
+          <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <div style="font-size:13.5px;color:var(--navy);line-height:1.35"><b style="font-family:Outfit">Дни у клиента</b> — кто задержал возврат</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;background:var(--wash);border-radius:14px;padding:16px 18px">
+          <div class="ic sm blue"><svg viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div style="font-size:13.5px;color:var(--navy);line-height:1.35"><b style="font-family:Outfit">Износ парка</b> — план замены на месяцы вперёд</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============== 8 · COMPETITORS =============== -->
+    <section class="slide" data-label="Рынок">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>08</b> / 12</div>
+      <div class="eyebrow" style="margin-top:26px"><span class="dot"></span>Рынок уже там</div>
+      <h2 class="title">Конкуренты уже перешли на&nbsp;RFID</h2>
+      <p class="lead">Компании в нашей отрасли уже считают спецодежду по электронным меткам. Это перестало быть «дорогой экзотикой» — это новый стандарт.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px">
+        <div class="card" style="padding:26px 28px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-family:'Outfit';font-weight:800;font-size:26px;color:var(--navy);letter-spacing:-.5px">Хлорка</div>
+            <span style="display:inline-flex;align-items:center;gap:6px;background:#e7f4ee;color:#1f8f60;
+              font-family:Outfit;font-weight:600;font-size:11.5px;padding:6px 12px;border-radius:9999px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#1f8f60"></span>На RFID</span>
+          </div>
+          <div style="font-size:12.5px;color:#9aa4b2;font-family:Outfit;font-weight:600;letter-spacing:.5px;margin-bottom:12px">chlorka.ru</div>
+          <p style="font-size:14px;line-height:1.55">Промышленная стирка и аренда текстиля. Использует электронный учёт по меткам для контроля движения белья.</p>
+        </div>
+        <div class="card" style="padding:26px 28px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-family:'Outfit';font-weight:800;font-size:26px;color:var(--navy);letter-spacing:-.5px">UniRent Systems</div>
+            <span style="display:inline-flex;align-items:center;gap:6px;background:#e7f4ee;color:#1f8f60;
+              font-family:Outfit;font-weight:600;font-size:11.5px;padding:6px 12px;border-radius:9999px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#1f8f60"></span>На RFID</span>
+          </div>
+          <div style="font-size:12.5px;color:#9aa4b2;font-family:Outfit;font-weight:600;letter-spacing:.5px;margin-bottom:12px">unirentspb.ru</div>
+          <p style="font-size:14px;line-height:1.55">Аренда спецодежды с прослеживаемостью каждой вещи по метке — от выдачи до стирки и возврата.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:26px;display:flex;align-items:center;gap:16px;background:var(--navy);
+        border-radius:16px;padding:20px 28px;color:#fff">
+        <div class="ic blue" style="background:rgba(255,255,255,.14)"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></div>
+        <div style="font-family:'Outfit';font-weight:600;font-size:17px;color:#eaf1fb;line-height:1.4">
+          Кто внедрит первым — выигрывает в скорости и&nbsp;доверии клиентов.<br>
+          <span style="color:#9fb2d4;font-weight:500;font-size:15px">Мы можем догнать рынок за один пилотный проект.</span></div>
+      </div>
+    </section>
+
+    <!-- =============== 9 · EQUIPMENT =============== -->
+    <section class="slide" data-label="Что нужно">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>09</b> / 12</div>
+      <div class="eyebrow" style="margin-top:26px"><span class="dot"></span>Что нужно закупить</div>
+      <h2 class="title">Простой набор для&nbsp;старта</h2>
+      <p class="lead">Ничего сложного. Пять позиций — и система готова к работе.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:26px">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 3 12V4a1 1 0 0 1 1-1h8a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></div>
+            <span class="chip" style="background:var(--navy);color:#fff">3 000 шт</span>
+          </div>
+          <h3>RFID-метки</h3>
+          <p>Вшиваются в каждую вещь при пошиве. Выдерживают стирку, сушку и химию.</p>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="ic"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 6h4M9 18h6"/></svg></div>
+            <span class="chip" style="background:var(--navy);color:#fff">2 шт</span>
+          </div>
+          <h3>Ручные сканеры</h3>
+          <p>Для кладовщиков: выдать, принять, найти нужную вещь за секунды.</p>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 3v18M20 3v18M4 5h16M4 8h16"/></svg></div>
+            <span class="chip" style="background:var(--navy);color:#fff">1 шт</span>
+          </div>
+          <h3>RFID-ворота</h3>
+          <p>Считывают всю тележку целиком за один проезд. Автоматический учёт возврата.</p>
+        </div>
+        <div class="card" style="background:var(--wash);border-color:#d8e3f0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div class="ic blue"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+            <span class="chip" style="background:#e7f4ee;color:#1f8f60"><svg viewBox="0 0 24 24" style="stroke:#1f8f60"><path d="M20 6 9 17l-5-5"/></svg>Уже есть</span>
+          </div>
+          <h3>Сервер</h3>
+          <p>Используем действующий — отдельных вложений не требует.</p>
+        </div>
+        <div class="card" style="grid-column:span 2;background:var(--navy);border:none;color:#fff;display:flex;align-items:center;gap:22px">
+          <div class="ic blue" style="background:rgba(255,255,255,.14);width:60px;height:60px"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0H5a2 2 0 0 1-2-2v-4m6 6h10a2 2 0 0 0 2-2v-4"/></svg></div>
+          <div>
+            <h3 style="color:#fff;font-size:20px;margin-bottom:6px">Программа и интеграция</h3>
+            <p style="color:#aebbd0;font-size:14px">Настраиваем под наши процессы: карточки вещей, отчёты, связка с учётной системой. Один раз — и работает.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============== 10 · BUDGET =============== -->
+    <section class="slide" data-label="Бюджет">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>10</b> / 12</div>
+      <div style="display:grid;grid-template-columns:1.05fr .95fr;gap:44px;height:100%;align-items:center">
+        <div>
+          <div class="eyebrow"><span class="dot"></span>Бюджет</div>
+          <h2 class="title">Старт от&nbsp;400&nbsp;000&nbsp;₽</h2>
+          <p class="lead" style="margin-bottom:8px">Это <b style="color:var(--ink)">разовые вложения</b>. Дальше — только метки на новые вещи, пара рублей за штуку.</p>
+          <div style="margin-top:22px;background:linear-gradient(120deg,#1e4fa3,#16294a);border-radius:18px;
+            padding:26px 30px;color:#fff">
+            <div style="font-size:13px;color:#bcd0ef;font-family:Outfit;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px">Итого под ключ</div>
+            <div class="pill-num" style="font-size:52px;color:#fff;letter-spacing:-1.5px">400–500&nbsp;тыс&nbsp;₽</div>
+            <div style="font-size:13.5px;color:#cdd8ea;margin-top:8px">Окупается за счёт того, что вещи перестают теряться.</div>
+          </div>
+        </div>
+
+        <!-- budget table -->
+        <div class="card" style="padding:10px 8px">
+          <table style="width:100%;border-collapse:collapse;font-size:15px">
+            <tbody>
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:16px 18px;color:var(--navy);font-family:Outfit;font-weight:600">Метки RFID <span style="color:#9aa4b2;font-weight:500">· 3 000 шт</span></td>
+                <td style="padding:16px 18px;text-align:right;font-family:Outfit;font-weight:700;color:var(--ink);white-space:nowrap">150 000 ₽</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:16px 18px;color:var(--navy);font-family:Outfit;font-weight:600">Ручные сканеры <span style="color:#9aa4b2;font-weight:500">· 2 шт</span></td>
+                <td style="padding:16px 18px;text-align:right;font-family:Outfit;font-weight:700;color:var(--ink);white-space:nowrap">80 000 ₽</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:16px 18px;color:var(--navy);font-family:Outfit;font-weight:600">RFID-ворота <span style="color:#9aa4b2;font-weight:500">· 1 шт</span></td>
+                <td style="padding:16px 18px;text-align:right;font-family:Outfit;font-weight:700;color:var(--ink);white-space:nowrap">70 000 ₽</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:16px 18px;color:var(--navy);font-family:Outfit;font-weight:600">Сервер</td>
+                <td style="padding:16px 18px;text-align:right;font-family:Outfit;font-weight:700;color:#1f8f60;white-space:nowrap">уже есть</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:16px 18px;color:var(--navy);font-family:Outfit;font-weight:600">Программа и интеграция</td>
+                <td style="padding:16px 18px;text-align:right;font-family:Outfit;font-weight:700;color:var(--ink);white-space:nowrap">100–200 000 ₽</td>
+              </tr>
+              <tr style="background:var(--navy)">
+                <td style="padding:18px 18px;color:#fff;font-family:Outfit;font-weight:700;font-size:16px;border-radius:0 0 0 12px">ИТОГО</td>
+                <td style="padding:18px 18px;text-align:right;font-family:Outfit;font-weight:800;color:#fff;font-size:18px;white-space:nowrap;border-radius:0 0 12px 0">400–500 000 ₽</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============== 11 · PLAN =============== -->
+    <section class="slide" data-label="План">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>11</b> / 12</div>
+      <div class="eyebrow" style="margin-top:26px"><span class="dot"></span>План внедрения</div>
+      <h2 class="title">Внедряем по шагам</h2>
+      <p class="lead">Начинаем с малого, проверяем на одном клиенте — и только потом масштабируем на весь парк.</p>
+
+      <div style="position:relative;margin-top:44px">
+        <div style="position:absolute;left:6%;right:6%;top:29px;height:3px;background:var(--line);border-radius:2px"></div>
+        <div style="position:absolute;left:6%;width:64%;top:29px;height:3px;background:linear-gradient(90deg,#1e4fa3,#3f7bd6);border-radius:2px"></div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;position:relative">
+          <div style="text-align:center;padding:0 4px">
+            <div style="width:58px;height:58px;border-radius:9999px;background:var(--blue);color:#fff;
+              display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:Outfit;font-weight:800;font-size:22px;box-shadow:0 10px 24px rgba(30,79,163,.35)">1</div>
+            <div style="font-family:Outfit;font-weight:700;font-size:15.5px;color:var(--ink);margin-bottom:6px">Пилот</div>
+            <div style="font-size:12.5px;line-height:1.45">500–1 000 вещей одного клиента. Метки + один сканер.</div>
+          </div>
+          <div style="text-align:center;padding:0 4px">
+            <div style="width:58px;height:58px;border-radius:9999px;background:var(--blue);color:#fff;
+              display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:Outfit;font-weight:800;font-size:22px;box-shadow:0 10px 24px rgba(30,79,163,.35)">2</div>
+            <div style="font-family:Outfit;font-weight:700;font-size:15.5px;color:var(--ink);margin-bottom:6px">Настройка ПО</div>
+            <div style="font-size:12.5px;line-height:1.45">Карточки вещей, отчёты, связка с учётной системой.</div>
+          </div>
+          <div style="text-align:center;padding:0 4px">
+            <div style="width:58px;height:58px;border-radius:9999px;background:var(--blue);color:#fff;
+              display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:Outfit;font-weight:800;font-size:22px;box-shadow:0 10px 24px rgba(30,79,163,.35)">3</div>
+            <div style="font-family:Outfit;font-weight:700;font-size:15.5px;color:var(--ink);margin-bottom:6px">Обучение</div>
+            <div style="font-size:12.5px;line-height:1.45">Кладовщики, прачечная, логисты — за один день.</div>
+          </div>
+          <div style="text-align:center;padding:0 4px">
+            <div style="width:58px;height:58px;border-radius:9999px;background:#fff;color:var(--blue);border:3px solid var(--blue);
+              display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:Outfit;font-weight:800;font-size:22px">4</div>
+            <div style="font-family:Outfit;font-weight:700;font-size:15.5px;color:var(--ink);margin-bottom:6px">Масштаб</div>
+            <div style="font-size:12.5px;line-height:1.45">Все клиенты + ворота на приёмке и складе.</div>
+          </div>
+          <div style="text-align:center;padding:0 4px">
+            <div style="width:58px;height:58px;border-radius:9999px;background:#fff;color:#9aa4b2;border:3px solid var(--line);
+              display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-family:Outfit;font-weight:800;font-size:22px">5</div>
+            <div style="font-family:Outfit;font-weight:700;font-size:15.5px;color:var(--ink);margin-bottom:6px">Аналитика</div>
+            <div style="font-size:12.5px;line-height:1.45">Износ, потери, планирование закупок и логистики.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:40px;display:flex;justify-content:center">
+        <div style="display:inline-flex;align-items:center;gap:12px;background:var(--wash);border-radius:9999px;padding:12px 22px">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:var(--blue);fill:none;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span style="font-family:Outfit;font-weight:600;font-size:14px;color:var(--navy)">От пилота до полного запуска — считанные недели, без остановки работы.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============== 12 · CLOSE / BENEFITS =============== -->
+    <section class="slide" data-label="Итог">
+      <div class="brand">МЕТРО<span>ХИМ</span></div>
+      <div class="pageno"><b>12</b> / 12</div>
+      <div class="eyebrow" style="margin-top:26px"><span class="dot"></span>Что вы получаете</div>
+      <h2 class="title">Порядок вместо&nbsp;хаоса</h2>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:26px">
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="ic blue"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></div>
+          <div><div style="font-family:Outfit;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:3px">Скорость</div><div style="font-size:13px;line-height:1.45">Сотни вещей за секунды вместо часов пересчёта.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="ic blue"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+          <div><div style="font-family:Outfit;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:3px">Ноль потерь</div><div style="font-size:13px;line-height:1.45">Видно, где каждая вещь. Пропажи почти исчезают.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="ic blue"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg></div>
+          <div><div style="font-family:Outfit;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:3px">История каждой вещи</div><div style="font-size:13px;line-height:1.45">Стирки, ремонты, износ — всё под рукой.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="ic blue"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/></svg></div>
+          <div><div style="font-family:Outfit;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:3px">Доверие клиентов</div><div style="font-size:13px;line-height:1.45">Любой спор закрывается фактами за минуту.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="ic blue"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div><div style="font-family:Outfit;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:3px">Экономия</div><div style="font-size:13px;line-height:1.45">Меньше потерь и лишних закупок — прямая выгода.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="ic blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <div><div style="font-family:Outfit;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:3px">Контроль износа</div><div style="font-size:13px;line-height:1.45">Замена по ресурсу, а не по жалобам.</div></div>
+        </div>
+      </div>
+
+      <div style="margin-top:30px;background:var(--navy);border-radius:20px;padding:28px 34px;
+        display:flex;align-items:center;justify-content:space-between;gap:24px;color:#fff">
+        <div>
+          <div class="serif" style="color:#7fa8e6;font-size:24px;margin-bottom:2px">Готовы начать?</div>
+          <div style="font-family:Outfit;font-weight:700;font-size:26px;letter-spacing:-.5px">Запустим пилот на одном клиенте</div>
+          <div style="font-size:14px;color:#aebbd0;margin-top:6px">Покажем результат на реальных вещах — без риска для всего парка.</div>
+        </div>
+        <div style="text-align:right;flex:0 0 auto">
+          <div style="font-family:'Outfit';font-weight:800;font-size:22px;letter-spacing:-.5px">МЕТРО<span style="color:#3f7bd6">ХИМ</span></div>
+          <div style="font-size:13px;color:#aebbd0;margin-top:8px;line-height:1.7">
+            +7 (812) 748-53-48<br>info@metrohim.ru<br>пр. Стачек, 100К, СПб</div>
+        </div>
+      </div>
+    </section>
+
+    </div><!-- /stage -->
+  </div><!-- /stage-wrap -->
+</div><!-- /deck -->
+
+<!-- HUD -->
+<div class="hud">
+  <div class="nav-btn" id="prev" title="Назад (←)"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+  <div class="dots" id="dots"></div>
+  <div class="nav-btn" id="next" title="Вперёд (→)"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+</div>
+<div class="hint">← → листать · F — на весь экран</div>
+
+<script>
+(function(){
+  var stage = document.getElementById('stage');
+  var slides = Array.prototype.slice.call(stage.querySelectorAll('.slide'));
+  var dotsWrap = document.getElementById('dots');
+  var cur = 0;
+
+  // build dots
+  slides.forEach(function(s,i){
+    var d = document.createElement('div');
+    d.className = 'dot-n' + (i===0?' active':'');
+    d.addEventListener('click', function(){ go(i); });
+    dotsWrap.appendChild(d);
+  });
+  var dots = Array.prototype.slice.call(dotsWrap.children);
+
+  function go(i){
+    cur = Math.max(0, Math.min(slides.length-1, i));
+    slides.forEach(function(s,idx){
+      s.classList.toggle('is-active', idx===cur);
+      s.classList.toggle('is-prev', idx<cur);
+    });
+    dots.forEach(function(d,idx){ d.classList.toggle('active', idx===cur); });
+  }
+
+  function scale(){
+    var pad = 40;
+    var sx = (window.innerWidth - pad) / 1280;
+    var sy = (window.innerHeight - pad) / 720;
+    var s = Math.min(sx, sy);
+    stage.style.transform = 'scale(' + s + ')';
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ go(cur+1); });
+  document.getElementById('prev').addEventListener('click', function(){ go(cur-1); });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight' || e.key==='PageDown' || e.key===' '){ e.preventDefault(); go(cur+1); }
+    else if(e.key==='ArrowLeft' || e.key==='PageUp'){ e.preventDefault(); go(cur-1); }
+    else if(e.key==='Home'){ go(0); }
+    else if(e.key==='End'){ go(slides.length-1); }
+    else if(e.key==='f' || e.key==='F'){
+      if(!document.fullscreenElement){ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }
+      else{ document.exitFullscreen&&document.exitFullscreen(); }
+    }
+  });
+
+  // swipe
+  var tx=0;
+  document.addEventListener('touchstart', function(e){ tx = e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    var dx = e.changedTouches[0].clientX - tx;
+    if(Math.abs(dx)>50){ go(cur + (dx<0?1:-1)); }
+  }, {passive:true});
+
+  window.addEventListener('resize', scale);
+  scale();
+  go(0);
+})();
+</script>
+</body>
+</html>

@@ -262,8 +262,28 @@
         <!-- circular cycle -->
         <div style="position:relative;width:100%;max-width:470px;aspect-ratio:1/1;margin:0 auto">
           <svg viewBox="0 0 400 400" style="position:absolute;inset:0;width:100%;height:100%">
-            <circle cx="200" cy="200" r="150" fill="none" stroke="#1e4fa3" stroke-width="2" stroke-dasharray="3 8" opacity=".55"/>
+            <defs>
+              <path id="cyclePath" d="M200,50 A150,150 0 1 1 199,50 Z" fill="none"/>
+              <radialGradient id="pulseGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#3f7bd6" stop-opacity=".55"/>
+                <stop offset="100%" stop-color="#3f7bd6" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
             <ellipse cx="200" cy="362" rx="150" ry="24" fill="#0f2038" opacity=".05"/>
+            <circle cx="200" cy="200" r="150" fill="none" stroke="#1e4fa3" stroke-width="2"
+              stroke-dasharray="3 8" opacity=".55" class="cyc-ring"/>
+            <!-- travelling glow -->
+            <circle r="22" fill="url(#pulseGlow)">
+              <animateMotion dur="9s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#cyclePath"/>
+              </animateMotion>
+            </circle>
+            <!-- travelling item marker -->
+            <circle r="7" fill="#3f7bd6" stroke="#fff" stroke-width="2">
+              <animateMotion dur="9s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#cyclePath"/>
+              </animateMotion>
+            </circle>
           </svg>
           <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:120px;height:120px;
             border-radius:16px;background:var(--navy);display:flex;flex-direction:column;align-items:center;
@@ -271,20 +291,30 @@
             <svg viewBox="0 0 24 24" style="width:30px;height:30px;stroke:#7fa8e6;fill:none;stroke-width:1.8"><path d="M16 3l-4 2-4-2-6 4 3 4 3-2v10h8V9l3 2 3-4z"/></svg>
             <div style="font-family:'Outfit';font-weight:700;font-size:12px;text-align:center">Вещь<br>с меткой</div>
           </div>
-          <!-- 6 nodes -->
-          <div class="cyc" style="left:50%;top:2%">1 · Пошив + метка</div>
-          <div class="cyc" style="left:97%;top:28%">2 · Склад</div>
-          <div class="cyc" style="left:97%;top:72%">3 · Выдача</div>
-          <div class="cyc" style="left:50%;top:98%">4 · У клиента</div>
-          <div class="cyc" style="left:3%;top:72%">5 · Возврат</div>
-          <div class="cyc" style="left:3%;top:28%">6 · Стирка</div>
+          <!-- 6 nodes, lit up in turn as the marker passes -->
+          <div class="cyc" style="left:50%;top:2%;animation-delay:0s">1 · Пошив + метка</div>
+          <div class="cyc" style="left:97%;top:28%;animation-delay:1.5s">2 · Склад</div>
+          <div class="cyc" style="left:97%;top:72%;animation-delay:3s">3 · Выдача</div>
+          <div class="cyc" style="left:50%;top:98%;animation-delay:4.5s">4 · У клиента</div>
+          <div class="cyc" style="left:3%;top:72%;animation-delay:6s">5 · Возврат</div>
+          <div class="cyc" style="left:3%;top:28%;animation-delay:7.5s">6 · Стирка</div>
         </div>
       </div>
       <style>
         .cyc{position:absolute;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--line);
           box-shadow:var(--shadow-sm);border-radius:9999px;padding:9px 15px;white-space:nowrap;
-          font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;color:var(--navy)}
+          font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;color:var(--navy);
+          animation:cycPulse 9s ease-in-out infinite}
         .cyc::first-letter{color:var(--blue)}
+        .cyc-ring{transform-origin:200px 200px;animation:cycSpin 40s linear infinite}
+        @keyframes cycSpin{to{transform:rotate(360deg)}}
+        @keyframes cycPulse{
+          0%,7%,100%{box-shadow:var(--shadow-sm);border-color:var(--line);color:var(--navy);transform:translate(-50%,-50%) scale(1)}
+          3%{box-shadow:0 0 0 7px rgba(63,123,214,.22),var(--shadow-sm);border-color:var(--blue);color:var(--blue);transform:translate(-50%,-50%) scale(1.09)}
+        }
+        @media (prefers-reduced-motion: reduce){
+          .cyc,.cyc-ring{animation:none!important}
+        }
       </style>
     </section>
 
